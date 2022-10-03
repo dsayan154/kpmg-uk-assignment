@@ -5,6 +5,12 @@ terraform {
       version = "4.33.0"
     }
   }
+  backend "s3" {
+    bucket  = "wordpress-tf-bucket"
+    key     = "prod/"
+    region  = "ap-south-1"
+    profile = "sayan-local-admin"
+  }
 }
 
 provider "aws" {
