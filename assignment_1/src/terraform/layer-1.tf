@@ -128,39 +128,27 @@ locals {
     for subnet in aws_subnet.wp_public_subnets :
         subnet.id => subnet.availability_zone
   }
+  # az_ngw_mappings = {
+  #   for ngw in aws_nat_gateway.wp_ngws :
+  #     lookup(local.public_subnet_az_mappings, ngw.subnet_id, "") => ngw.id
+  # }
   az_ngw_mappings = {
     for ngw in aws_nat_gateway.wp_ngws :
       lookup(local.public_subnet_az_mappings, ngw.subnet_id, "") => ngw.id
   }
 }
 
-resource "aws_route_table" "private_app_rts" {
-  for_each = aws_subnet.wp_app_subnets
+resource "aws_route_table" "private_rts" {
+  for_each = toset(aws_nat_gateway.wp_ngws[*].id) 
   vpc_id = aws_vpc.wp_vpc.id
   route {
     cidr_block = "0.0.0.0/0"
-    nat_gateway_id = lookup(local.az_ngw_mappings, each.value.availability_zone, "")
+    nat_gateway_id = each.value
   }
   tags = merge(
     local.additional_default_tags,
     {
-      "Name" = format("%s-%s","wp-private-app-rt",element(split("-",each.value.availability_zone), 2))
-    },
-  )
-}
-
-
-resource "aws_route_table" "private_data_rts" {
-  for_each = aws_subnet.wp_data_subnets
-  vpc_id = aws_vpc.wp_vpc.id
-  route {
-    cidr_block = "0.0.0.0/0"
-    nat_gateway_id = lookup(local.az_ngw_mappings, each.value.availability_zone, "")
-  }
-  tags = merge(
-    local.additional_default_tags,
-    {
-      "Name" = format("%s-%s","wp-private-data-rt",element(split("-",each.value.availability_zone), 2))
+      "Name" = "wp-private-rt"
     },
   )
 }
@@ -168,11 +156,54 @@ resource "aws_route_table" "private_data_rts" {
 resource "aws_route_table_association" "private_app_rt_sa" {
   for_each = aws_subnet.wp_app_subnets
   subnet_id = each.value.id
-  route_table_id = aws_route_table.private_app_rts[each.value.availability_zone].id
+  route_table_id = aws_route_table.private_rts[local.az_ngw_mappings[each.value.availability_zone]].id
 }
 
 resource "aws_route_table_association" "private_data_rt_sa" {
   for_each = aws_subnet.wp_data_subnets
   subnet_id = each.value.id
-  route_table_id = aws_route_table.private_data_rts[each.value.availability_zone].id
+  route_table_id = aws_route_table.private_rts[local.az_ngw_mappings[each.value.availability_zone]].id
 }
+
+# resource "aws_route_table" "private_app_rts" {
+#   for_each = aws_subnet.wp_app_subnets
+#   vpc_id = aws_vpc.wp_vpc.id
+#   route {
+#     cidr_block = "0.0.0.0/0"
+#     nat_gateway_id = lookup(local.az_ngw_mappings, each.value.availability_zone, "")
+#   }
+#   tags = merge(
+#     local.additional_default_tags,
+#     {
+#       "Name" = format("%s-%s","wp-private-app-rt",element(split("-",each.value.availability_zone), 2))
+#     },
+#   )
+# }
+
+
+# resource "aws_route_table" "private_data_rts" {
+#   for_each = aws_subnet.wp_data_subnets
+#   vpc_id = aws_vpc.wp_vpc.id
+#   route {
+#     cidr_block = "0.0.0.0/0"
+#     nat_gateway_id = lookup(local.az_ngw_mappings, each.value.availability_zone, "")
+#   }
+#   tags = merge(
+#     local.additional_default_tags,
+#     {
+#       "Name" = format("%s-%s","wp-private-data-rt",element(split("-",each.value.availability_zone), 2))
+#     },
+#   )
+# }
+
+# resource "aws_route_table_association" "private_app_rt_sa" {
+#   for_each = aws_subnet.wp_app_subnets
+#   subnet_id = each.value.id
+#   route_table_id = aws_route_table.private_app_rts[each.value.availability_zone].id
+# }
+
+# resource "aws_route_table_association" "private_data_rt_sa" {
+#   for_each = aws_subnet.wp_data_subnets
+#   subnet_id = each.value.id
+#   route_table_id = aws_route_table.private_data_rts[each.value.availability_zone].id
+# }
